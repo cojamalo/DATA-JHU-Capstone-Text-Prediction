@@ -1,0 +1,188 @@
+---
+title: "Importing, Cleaning, and Tokenization of the Text Data"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval=FALSE)
+```
+
+
+### Submission by Connor Lenio. Email: cojamalo@gmail.com
+Completion Date: Aug 6, 2017
+
+## Goal
+
+The following functions remove unwanted characters and extract tokens from each line of the input data. This step was run on an AWS EC2 RStudio Server to improve processing time for the large amount of text data present in the source files. The final output of the process was a data frame with all the unique unigrams, bigrams, and trigrams present in the data, sorted by the number of times they appeared in the data. 
+
+## Load Packages
+
+```{r load}
+library(data.table)
+library(tidyverse)
+library(stringr)
+library(qdap)
+library(tm)
+library(tidytext)
+```
+<br>
+
+## Import the Data
+
+The `read_lines` function was used to import the data into a data frames with a character vector column where one row represents one line of text from the original file.
+```{r import}
+news <- read_lines("en_US.news.txt") %>% tbl_df
+blogs <- read_lines("en_US.blogs.txt") %>% tbl_df
+tweets <- read_lines("en_US.twitter.txt") %>% tbl_df
+```
+<br>
+
+## Functions to Clean and Tokenize the Text Data
+
+The following functions execute all of the cleaning and tokenization commands needed to produce the output data frame. 
+
+### Numbers to Words
+
+One assumption I make for my final predictive model is that the model will not try to predict numbers given in a digit format. However, when a number is in its word form, such as "one", the model will make predictions. Thus, to provide as much number data as possible, all digits in the input text string are converted to their word versions using the following two functions. The first function, `numbers2words` is sourced from Github user `ateucher` who credits the original work to John Fox in this [thread](http://tolstoy.newcastle.edu.au/R/help/05/04/2715.html).
+
+```{r numbers2words}
+# Source: https://github.com/ateucher/useful_code/blob/master/R/numbers2words.r
+  numbers2words <- function(x){
+    ## Function by John Fox found here: 
+    ## http://tolstoy.newcastle.edu.au/R/help/05/04/2715.html
+    ## Tweaks by AJH to add commas and "and"
+    ## Given a number, returns a string of the number's word equivalent
+    helper <- function(x){
+      
+      digits <- rev(strsplit(as.character(x), "")[[1]])
+      nDigits <- length(digits)
+      if (nDigits == 1) as.vector(ones[digits])
+      else if (nDigits == 2)
+        if (x <= 19) as.vector(teens[digits[1]])
+      else trim(paste(tens[digits[2]],
+                      Recall(as.numeric(digits[1]))))
+      else if (nDigits == 3) trim(paste(ones[digits[3]], "hundred and", 
+                                        Recall(makeNumber(digits[2:1]))))
+      else {
+        nSuffix <- ((nDigits + 2) %/% 3) - 1
+        if (nSuffix > length(suffixes)) stop(paste(x, "is too large!"))
+        trim(paste(Recall(makeNumber(digits[
+          nDigits:(3*nSuffix + 1)])),
+          suffixes[nSuffix],"," ,
+          Recall(makeNumber(digits[(3*nSuffix):1]))))
+      }
+    }
+    trim <- function(text){
+      #Tidy leading/trailing whitespace, space before comma
+      text=gsub("^\ ", "", gsub("\ *$", "", gsub("\ ,",",",text)))
+      #Clear any trailing " and"
+      text=gsub(" and$","",text)
+      #Clear any trailing comma
+      gsub("\ *,$","",text)
+    }  
+    makeNumber <- function(...) as.numeric(paste(..., collapse=""))     
+    #Disable scientific notation
+    opts <- options(scipen=100) 
+    on.exit(options(opts)) 
+    ones <- c("", "one", "two", "three", "four", "five", "six", "seven",
+              "eight", "nine") 
+    names(ones) <- 0:9 
+    teens <- c("ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
+               "sixteen", " seventeen", "eighteen", "nineteen")
+    names(teens) <- 0:9 
+    tens <- c("twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty",
+              "ninety") 
+    names(tens) <- 2:9 
+    x <- round(x)
+    suffixes <- c("thousand", "million", "billion", "trillion")     
+    if (length(x) > 1) return(trim(sapply(x, helper)))
+    helper(x)
+  }
+
+str_num2words = function(input_string) {
+    ## Given an input string, replaces all digits with their numeric equivalents using numbers2words()
+    numbers = str_extract_all(input_string, '[0-9]+')[[1]]
+    conv_list = list()
+    for(num in numbers) {
+        conv_list[[num]] = numbers2words(as.numeric(num))
+    }
+    output = input_string
+    for(num in names(conv_list)) {
+        output = str_replace_all(output, num, conv_list[[num]])
+    }
+    return(output)
+}
+```
+<br>
+
+### Main Cleaning and Tokenization Functions
+
+The main functions used to clean and tokenize the data are `clean_vector_source`, `get_all_grams`, and `get_gram_counts`. The goal is to have tokens that contain only ASCII characters, maybe hyphenated or include a hypostrophy, are not digits, and in any case.
+
+```{r main}
+# 1o Helper Functions
+clean_vector_source = function(vector_source) {
+    ## Given a character vector source,
+    ## 1) Replaces all digits with their word equivalent
+    ## 2) Removes all punctuation other than hyphens and apostrophes
+    ## 3) Keeps hyphens only if they are connecting a compound word, as in "Part-time student"
+    ## 4) Removes input lines with non-ASCII characters
+    ## Returns a clean character vector
+    clean_output = vector_source %>%
+                    str_num2words %>%
+                    str_replace_all('[^\\sA-Za-z\'\\-]', '') %>%
+                    str_replace_all('(?<!\\b[A-Za-z]{0,9})([-])(?![A-Za-z]+\\b)', "")
+    clean_output = clean_output[!str_detect(clean_output, "[^\x20-\x7E]")]
+    return(clean_output)
+}
+
+get_all_grams = function(tbl_source) {
+    ## Given an input tbl with a character vector called "clean"
+    ## Extracts all unigrams, bigrams, and trigrams from the character vector
+    ## Returns a single data frame containing all tokens, labelled by the number of grams
+    unigrams = tbl_source %>% unnest_tokens(token, clean, token="ngrams", n = 1, to_lower=FALSE) 
+    unigrams$n_gram = 'one'
+    bigrams = tbl_source %>% unnest_tokens(token, clean, token="ngrams", n = 2, to_lower=FALSE) 
+    bigrams$n_gram = 'two'
+    trigrams = tbl_source %>% unnest_tokens(token, clean, token="ngrams", n = 3, to_lower=FALSE) 
+    trigrams$n_gram = 'three'
+    return(bind_rows(unigrams,bigrams,trigrams))
+}
+
+# 2o Helper Functions
+get_gram_counts = function(vector_source) {
+    ## Given a character vector source,
+    ## Runs clean_vector_source and get_all_grams
+    ## Then, counts the number of instances of each unique token
+    ## Returns a tbl data frame of all the tokens from the input vector
+    ## Sorted by number of occurances and labelled by the number of grams in each token
+    all_tokens = data.frame(clean=clean_vector_source(vector_source), stringsAsFactors = FALSE) %>%
+                    tbl_df %>%
+                    get_all_grams %>% 
+                    group_by(n_gram) %>% 
+                    count(token, sort=TRUE)
+    return(all_tokens)
+}
+```
+<br>
+
+## Run the functions for the three data sources
+
+The functions above are executed for each data source and the resulting output was exported via CSV files from the RStudio Server.
+
+```{r execute}
+news_grams = get_gram_counts(news$value)
+write_csv(news_grams, "news_grams.csv")
+blogs_grams = get_gram_counts(blogs$value)
+write_csv(blogs_grams, "blogs_grams.csv")
+tweets_grams = get_gram_counts(tweets$value)
+write_csv(tweets_grams, "tweets_grams.csv")
+```
+
+<br>
+
