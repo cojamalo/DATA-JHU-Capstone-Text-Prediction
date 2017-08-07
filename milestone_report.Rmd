@@ -56,7 +56,7 @@ make_wordcloud = function(sample_df, n_gram_n = "one", ...) {
 
 ## Goal
 
-The following markdown file documents the initial progress on John Hopkins University's Data Science Capstone course hosted by Coursera. The goal of the project is to construct a working predictive text web app that functions like the predictive text features found in keyboard apps SwiftKey and Gboard. Topics covered in this document include importing, cleaning, and tokenizing the text data supplied for the project, an exploratory analysis of the processed data, and my initial thoughts and assumptions for constructing the final app and predictive text algorithm. 
+The following markdown file documents the initial progress on John Hopkins University's Data Science Capstone course hosted by Coursera. The goal of the project is to construct a working predictive text web app that functions like the predictive text features found in keyboard apps such as SwiftKey and Gboard. Topics covered in this document include importing, cleaning, and tokenizing the text data supplied for the project, an exploratory analysis of the processed data, and my initial thoughts and assumptions for constructing the final app and predictive text algorithm. 
 
 * * *
 
@@ -180,7 +180,7 @@ make_wordcloud(all_grams, "three", max.words=80, colors=brewer.pal(5, "Blues")[3
 ```
 <br>
 
-## A Sample of Controlling Token Quality
+## Controlling Token Quality
 
 The data manipulation process must control for the quality of the tokens used in the final model. By sampling the source data completely, fake words, rare words and names, and misspelled words are included in the full token data in `all_tokens`. Thus, these undesirable words must be eliminated from the data prior to constructing the model.
 
