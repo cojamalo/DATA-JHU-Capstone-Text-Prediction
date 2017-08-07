@@ -83,7 +83,7 @@ tweets = read_lines("./en_US/en_US.twitter.txt") %>% tbl_df
 
 ## Clean and tokenize the data
 
-Before performing exploratory data analysis, the data was processed into to a more useful form for constructing the final model. The final model will suggest words as one types and, thus, individual words and their neighbors need to be identified in the data. The individual words, or tokens were extracted from each line of data. Each line of data was processed, removing unwanted characters and tokenized to isolate unigrams, bigrams, and trigrams (such as "the", "the dog", and "the dog runs"). The detailed process is outlined at [Importing, Cleaning, and Tokenization of the Text Data](https://github.com/cojamalo/DATA-JHU-Capstone-Text-Prediction/import_clean_tokenize.html).
+Before performing exploratory data analysis, the data was processed into to a more useful form for constructing the final model. The final model will suggest words as one types and, thus, individual words and their neighbors need to be identified in the data. The individual words, or tokens were extracted from each line of data. Each line of data was processed, removing unwanted characters and tokenized to isolate unigrams, bigrams, and trigrams (such as "the", "the dog", and "the dog runs"). The detailed process is outlined at [Importing, Cleaning, and Tokenization of the Text Data](https://cojamalo.github.io/DATA-JHU-Capstone-Text-Prediction/import_clean_tokenize.html).
 
 These processes were run on an AWS EC2 RStudio Server to improve processing time for the large amount of data. The data was exported from that server as a CSV file:
 ```{r import-processed}
