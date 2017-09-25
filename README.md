@@ -10,6 +10,10 @@ Please view https://cojamalo.github.io/DATA-JHU-Capstone-Text-Prediction/import_
 
 Please view https://cojamalo.github.io/DATA-JHU-Capstone-Text-Prediction/milestone_report.html to properly view the Milestone Report.
 
+The "Shiny" folder contains the code for the app and my accompanying slideshow.
+
+Please view https://cojamalo.shinyapps.io/JHU_Text_Prediction/ to try the app.
+
 # Project description from Coursera:
 
 "Around the world, people are spending an increasing amount of time on their mobile devices for email, social networking, banking and a whole range of other activities. But typing on mobile devices can be a serious pain. SwiftKey, our corporate partner in this capstone, builds a smart keyboard that makes it easier for people to type on their mobile devices. One cornerstone of their smart keyboard is predictive text models. When someone types:
