@@ -1,0 +1,51 @@
+---
+title: "JHU Text Prediction App"
+subtitle: "By: Connor Lenio"
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## The Basics
+
+The app will generate up to three different suggested words or phrases to complete any given character input in the text entry box.
+
+Simply start typing in the text box and the suggestions will appear above the text entry box.
+
+The suggestions attempt to complete the input sentence or try to correct the spelling of the input by suggesting the closest spelled word present in the sampled text data. Ending spaces will make a difference as an ending space indicates to the algorithm that the last typed word has ended.
+        
+        
+
+## A Markov Chain Prediction Algorithm
+
+The predictions are made using a Markov Chain model represented by a trie using nested lists in R. Input words that are not in the final model can still generate predictions by suggesting nearest spellings or by providing the most probable next words given any words.
+
+The mined text data was split into unique three word sequences in preparation for constructing the Markov Chain. These three word sequences where then stored in a trie where each node was a single character.
+
+Some additional list traversal logic was written to navigate the trie given a text input to find the closest match to the input in the trie. Every match in the trie had the next characters or words associated with them due to the stored information from the unique three word sequences.  
+
+
+
+## How a Markov Chain Stored in a Trie
+
+In the trie, each character was stored as a key (node). When a word or character string is passed to the trie, each character becomes a key or list name to access deeper nested lists. 
+For example, `trie$t$h$e` would return the child nodes for all possible next characters seen after "the" in the data. For instance, `n` is a child node of `trie$t$h$e` since "then" is in the dictionary.
+
+The trie data is stored in the cloud with AWS S3 and accessed by the shiny server.
+
+A nice feature of this app is that the text completion logic is separate from the Markov Chain model. Thus, to improve the model's predictions one can simply update the model by storing more or different terms in the trie. On the other hand, the app is limited by the memory available to load the trie. 
+
+## Special Thanks
+
+Project completed on September 10, 2017.
+
+Thank you to my Coursera Peers for evaluating my project!
+
+Thank you to John Hopkins University as well as Jeff Leek, Roger Peng, and Brian Caffo for hosting this Data Science program!
+
+Thank you to Harvard's CS50 for teaching me about tries when I first started learning computer science a year ago!
+
+A special nod to Datacamp.com, Duke, MIT, Stanford, Coursera, and Edx for making such high quality information available and getting me started on my Data Science journey!
+

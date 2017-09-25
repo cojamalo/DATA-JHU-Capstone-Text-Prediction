@@ -46,7 +46,7 @@ tweets <- read_lines("en_US.twitter.txt") %>% tbl_df
 
 The following functions execute all of the cleaning and tokenization commands needed to produce the output data frame. 
 
-### Numbers to Words
+### Numbers to Words (Under review)
 
 One assumption I make for my final predictive model is that the model will not try to predict numbers given in a digit format. However, when a number is in its word form, such as "one", the model will make predictions. Thus, to provide as much number data as possible, all digits in the input text string are converted to their word versions using the following two functions. The first function, `numbers2words` is sourced from Github user `ateucher` who credits the original work to John Fox in this [thread](http://tolstoy.newcastle.edu.au/R/help/05/04/2715.html).
 
@@ -70,8 +70,8 @@ One assumption I make for my final predictive model is that the model will not t
                                         Recall(makeNumber(digits[2:1]))))
       else {
         nSuffix <- ((nDigits + 2) %/% 3) - 1
-        if (nSuffix > length(suffixes)) stop(paste(x, "is too large!"))
-        trim(paste(Recall(makeNumber(digits[
+        if (nSuffix > length(suffixes)) as.vector("")
+        else trim(paste(Recall(makeNumber(digits[
           nDigits:(3*nSuffix + 1)])),
           suffixes[nSuffix],"," ,
           Recall(makeNumber(digits[(3*nSuffix):1]))))
@@ -104,18 +104,23 @@ One assumption I make for my final predictive model is that the model will not t
     helper(x)
   }
 
-str_num2words = function(input_string) {
-    ## Given an input string, replaces all digits with their numeric equivalents using numbers2words()
-    numbers = str_extract_all(input_string, '[0-9]+')[[1]]
-    conv_list = list()
-    for(num in numbers) {
-        conv_list[[num]] = numbers2words(as.numeric(num))
+str_num2words = function(character_vector) {
+    new_vec = c()
+    for (input_string in character_vector) {
+       ## Given an input string, replaces all digits with their numeric equivalents using numbers2words()
+        numbers = str_extract_all(input_string, '[0-9]+')[[1]]
+        conv_list = list()
+        for(num in numbers) {
+            conv_list[[num]] = numbers2words(as.numeric(num))
+        }
+        output = input_string
+        for(num in names(conv_list)) {
+            output = str_replace_all(output, num, conv_list[[num]])
+        }
+        new_vec = c(new_vec, output)
     }
-    output = input_string
-    for(num in names(conv_list)) {
-        output = str_replace_all(output, num, conv_list[[num]])
-    }
-    return(output)
+    
+    return(new_vec)
 }
 ```
 <br>
@@ -128,16 +133,20 @@ The main functions used to clean and tokenize the data are `clean_vector_source`
 # 1o Helper Functions
 clean_vector_source = function(vector_source) {
     ## Given a character vector source,
-    ## 1) Replaces all digits with their word equivalent
-    ## 2) Removes all punctuation other than hyphens and apostrophes
-    ## 3) Keeps hyphens only if they are connecting a compound word, as in "Part-time student"
-    ## 4) Removes input lines with non-ASCII characters
+    ## 1) Removes input lines with non-ASCII characters
+    ## 2) Breaks all the lines into individual sentences (by end punctuation)
+    ## 3) Removes all punctuation other than hyphens and apostrophes
+    ## 4) Keeps hyphens only if they are connecting a compound word, as in "Part-time student"
+    ## 5) Replaces all digits with their word equivalent
+    ## 
     ## Returns a clean character vector
-    clean_output = vector_source %>%
-                    str_num2words %>%
+    clean_output = vector_source[!str_detect(vector_source, "[^\x20-\x7E]")] %>%
+                    str_split('[?!.|;]+ ') %>%
+                    unlist %>%
                     str_replace_all('[^\\sA-Za-z\'\\-]', '') %>%
-                    str_replace_all('(?<!\\b[A-Za-z]{0,9})([-])(?![A-Za-z]+\\b)', "")
-    clean_output = clean_output[!str_detect(clean_output, "[^\x20-\x7E]")]
+                    str_replace_all('(?<!\\b[A-Za-z]{0,9})([-])(?![A-Za-z]+\\b)', "") 
+                    #str_num2words
+    clean_output = clean_output[clean_output != ""]
     return(clean_output)
 }
 

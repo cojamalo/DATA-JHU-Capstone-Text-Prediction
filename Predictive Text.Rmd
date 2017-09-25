@@ -1,0 +1,586 @@
+---
+title: "JHU Capstone"
+output: html_document
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(eval=FALSE,fig.align='center', message = FALSE, warning=FALSE)
+```
+
+## Load Packages
+
+```{r message=FALSE}
+library(data.table)
+library(tidyverse)
+library(stringr)
+library(qdap)
+library(tm)
+library(tidytext)
+library(wordcloud)
+library(splines)
+```
+
+## Load Raw Data
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+news <- read_lines("/Users/cojamalo/Documents/JHU Capstone/en_US/en_US.news.txt") %>% tbl_df
+blogs <- read_lines("/Users/cojamalo/Documents/JHU Capstone/en_US/en_US.blogs.txt") %>% tbl_df
+tweets <- read_lines("/Users/cojamalo/Documents/JHU Capstone/en_US/en_US.twitter.txt") %>% tbl_df
+```
+
+
+```{r}
+# 1o Helper Functions
+get_med_bytes_per_row = function(text_df_source) {
+    return(apply(text_df_source, 1, object.size) %>% median)
+}
+# 2o Helper Functions
+sample_text_data = function(sample_size_list, sources = list(news, blogs, tweets), seed = 123) {
+    all_sample = data.frame()
+    set.seed(seed)
+    for (i in 1:length(sources)) {
+        new_sample = sample_n(sources[[i]], sample_size_list[[i]])
+        all_sample = bind_rows(all_sample, new_sample)
+    }
+    return(all_sample)
+}
+```
+
+```{r}
+profvis::profvis({vector_source = news$value[1:10000]
+    clean_output = vector_source[!str_detect(vector_source, "[^\x20-\x7E]")] 
+    clean_output = clean_output %>% str_split('[?!.|;]+ ')
+    clean_output = clean_output %>% unlist 
+    clean_output = clean_output %>% str_replace_all('[^\\sA-Za-z\'\\-]', '') 
+    clean_output = clean_output %>% str_replace_all('(?<!\\b[A-Za-z]{0,9})([-])(?![A-Za-z]+\\b)', "")
+    #clean_output = clean_output %>% str_num2words
+    clean_output = clean_output[clean_output != ""]
+})
+
+
+profvis::profvis({
+    character_vector = clean_output
+    new_vec = c()
+    for (input_string in character_vector) {
+       ## Given an input string, replaces all digits with their numeric equivalents using numbers2words()
+        numbers = str_extract_all(input_string, '[0-9]+')[[1]]
+        conv_list = list()
+        for(num in numbers) {
+            conv_list[[num]] = numbers2words(as.numeric(num))
+        }
+        output = input_string
+        for(num in names(conv_list)) {
+            output = str_replace_all(output, num, conv_list[[num]])
+        }
+        new_vec = c(new_vec, output)
+    }
+    
+})
+```
+
+
+
+```{r}
+# 1o Helper Functions
+clean_vector_source = function(vector_source) {
+    clean_output = vector_source %>%
+                    str_num2words %>%
+                    str_replace_all('[^\\sA-Za-z\'\\-]', '') %>%
+                    str_replace_all('(?<!\\b[A-Za-z]{0,9})([-])(?![A-Za-z]+\\b)', "")
+    clean_output = clean_output[!str_detect(clean_output, "[^\x20-\x7E]")]
+    return(clean_output)
+}
+
+get_all_grams = function(tbl_source) {
+    unigrams = tbl_source %>% unnest_tokens(token, clean, token="ngrams", n = 1, to_lower=FALSE) 
+    unigrams$n_gram = 'one'
+    bigrams = tbl_source %>% unnest_tokens(token, clean, token="ngrams", n = 2, to_lower=FALSE) 
+    bigrams$n_gram = 'two'
+    trigrams = tbl_source %>% unnest_tokens(token, clean, token="ngrams", n = 3, to_lower=FALSE) 
+    trigrams$n_gram = 'three'
+    return(bind_rows(unigrams,bigrams,trigrams))
+}
+
+# 2o Helper Functions
+get_gram_counts = function(vector_source) {
+    all_tokens = data.frame(clean=clean_vector_source(vector_source), stringsAsFactors = FALSE) %>%
+                    tbl_df %>%
+                    get_all_grams %>% 
+                    group_by(n_gram) %>% 
+                    count(token, sort=TRUE)
+    return(all_tokens)
+}
+# Main
+build_token_count_df = function(seed=1234, n_samples = 50, sample_size = 1*10^7) {
+    set.seed(seed)
+    sample_size_list = lapply(list(news, blogs, tweets), function(x) sample_size / get_med_bytes_per_row(x))
+    final_output = data.frame()
+    pb <- txtProgressBar(min = 0, max = n_samples, style = 3)
+    for(i in 1:n_samples) {
+        setTxtProgressBar(pb, i)
+        seed2 = sample(100:1000, 1)
+        all_sample_df = sample_text_data(sample_size_list, seed=seed2)
+        all_tokens = get_gram_counts(all_sample_df$value) 
+        final_output = final_output %>%
+                        bind_rows(all_tokens) %>%
+                        group_by(n_gram, token) %>%
+                        summarize(n = sum(n))
+    }
+    return(final_output %>% arrange(desc(n)))
+}
+
+start = Sys.time()
+all_tokens = build_token_count_df()
+end = Sys.time()
+end-start
+write_csv(all_tokens, "/Users/cojamalo/Documents/JHU Capstone/all_tokens.csv")
+all_tokens
+```
+
+
+
+
+##### Break to algo
+
+
+
+```{r}
+## Data imported to current session
+all_grams = fread("/Users/cojamalo/Documents/JHU_Capstone/To Server/8-15/all_grams/all_grams.csv", showProgress = TRUE, stringsAsFactors = FALSE) %>% tbl_df
+```
+
+```{r}
+unigrams = all_grams %>% filter(n_gram=="one") %>% write.csv('unigrams.csv')
+bigrams = all_grams %>% filter(n_gram=="two") %>% separate(token, c("word1", "word2"), sep= " ") %>% write.csv('bigrams.csv')
+trigrams = all_grams %>% filter(n_gram=="three") %>% separate(token, c("word1", "word2","word3"), sep= " ") %>% write.csv('trigrams.csv')
+quadgrams = all_grams %>% filter(n_gram=="four") %>% separate(token, c("word1", "word2","word3","word4"), sep= " ") %>% write.csv('quadgrams.csv')
+```
+
+```{r}
+write.csv(unigrams, 'unigrams.csv')
+write.csv(bigrams, 'unigrams.csv')
+```
+
+
+```{r construct-dict}
+# Construction of an English reference dictionary
+# Source: https://github.com/dwyl/english-words
+eng_dict1 = read_lines('./eng_dict1.txt')
+eng_dict2 = read_lines('./eng_dict2.txt')
+eng_dict = c(eng_dict1, eng_dict2) %>% unique
+```
+<br>
+
+```{r qual-check, cache=TRUE}
+# The percentage of each word that matches a dictionary word for each frequency is determined
+qual_by_n = unigrams %>% mutate(in_dict = tolower(token) %in% eng_dict) %>% group_by(n) %>% summarize(perc_in_dict = mean(in_dict), n_in_group = n()) %>% arrange(desc(n)) 
+
+# Filter the max frequency to consider
+plot_dat = qual_by_n %>% filter(n <= 625)
+# Fit polynomial regression to estimate relationship between frequency and percent in dictionary
+fit_ns <- lm(perc_in_dict ~ n + ns(n,15), plot_dat); pred_ns <- predict(fit_ns, type="response")
+# Set cutoff and predict the percent in dictionary for that cutoff
+cutoff_n = 100
+accuracy = predict(fit_ns, newdata=data.frame(n=cutoff_n), type="response")
+# Plot results
+ggplot(plot_dat, aes(x=n, y=perc_in_dict)) +
+    geom_point() + 
+    geom_line(aes(y = pred_ns), color = "#00BA38", lwd = 1) + 
+    geom_vline(xintercept=cutoff_n, color ="#F8766D") +
+    geom_hline(yintercept=accuracy, color ="#F8766D") +
+    geom_text(aes(0.1,accuracy,label = format(accuracy, digits = 3), vjust = -1), color ="#F8766D") +
+    geom_text(aes(450,0.5,label = paste("top",format((unigrams %>% filter(n>=cutoff_n) %>% nrow), big.mark = ","),"words"), vjust = -1), color ="#619CFF") +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    labs(title = "Proportion of Tokens in Dictionary by Frequency of Tokens in the Data", y = "Proportion of Tokens in Dictionary", x = "Frequency of Token in Data")
+```
+
+```{r}
+unigrams = unigrams %>% 
+            filter(n>=100)
+```
+
+
+```{r}
+bigrams = bigrams %>%
+            filter(n >= 6) %>%
+            separate(token, c("word1", "word2"), sep= " ")
+
+qual_by_n = bigrams %>% mutate(in_dict = (tolower(word1) %in% eng_dict & tolower(word2) %in% eng_dict)) %>% group_by(n) %>% summarize(perc_in_dict = mean(in_dict)) %>% arrange(desc(n)) 
+
+plot_dat = qual_by_n %>% filter(n <= 50)
+fit_ns <- lm(perc_in_dict ~ n + ns(n,15), plot_dat); pred_ns <- predict(fit_ns, type="response")
+cutoff_n = 12
+accuracy = predict(fit_ns, newdata=data.frame(n=cutoff_n), type="response")
+ggplot(plot_dat, aes(x=n, y=perc_in_dict)) +
+    geom_point() + 
+    geom_line(aes(y = pred_ns), color = "green", lwd = 1) + 
+    geom_vline(xintercept=cutoff_n, color ="red") +
+    geom_hline(yintercept=accuracy, color ="red") +
+    geom_text(aes(0.1,accuracy,label = format(accuracy, digits = 3), vjust = -1), color ="red")
+
+bigrams = bigrams %>%
+    filter(n >= 6) 
+```
+
+```{r}
+trigrams = trigrams %>%
+            filter(n >= 4) %>%
+            separate(token, c("word1", "word2", "word3"), sep= " ")
+
+qual_by_n = trigrams %>% mutate(in_dict = (tolower(word1) %in% eng_dict & tolower(word2) %in% eng_dict & tolower(word3) %in% eng_dict)) %>% group_by(n) %>% summarize(perc_in_dict = mean(in_dict), n_in_group = n()) %>% arrange(desc(n)) 
+
+plot_dat = qual_by_n %>% filter(n <= 50, n_in_group >= 5)
+fit_ns <- lm(perc_in_dict ~ n + ns(n,4), plot_dat); pred_ns <- predict(fit_ns, type="response")
+cutoff_n = 4
+accuracy = predict(fit_ns, newdata=data.frame(n=cutoff_n), type="response")
+ggplot(plot_dat, aes(x=n, y=perc_in_dict)) +
+    geom_point() + 
+    geom_line(aes(y = pred_ns), color = "green", lwd = 1) + 
+    geom_vline(xintercept=cutoff_n, color ="red") +
+    geom_hline(yintercept=accuracy, color ="red") +
+    geom_text(aes(0.1,accuracy,label = format(accuracy, digits = 3), vjust = -1), color ="red")
+
+# trigrams = trigrams %>%
+#     filter(n >= 4) 
+```
+
+
+```{r}
+## Alternative way of isolating dictionary
+##http://www.aclweb.org/anthology/A88-1005
+bigrams = bigrams[(bigrams$word1 %in% unigrams$token),] %>% group_by(word1) %>% top_n(50,n)
+
+trigrams = trigrams[(trigrams$word1 %in% bigrams$word1) & (trigrams$word2 %in% bigrams$word2),] %>% group_by(word1,word2) %>% top_n(20,n) %>% arrange(desc(n))
+
+quadgrams = quadgrams[(quadgrams$word1 %in% trigrams$word1) & (quadgramsgrams$word2 %in% trigrams$word2) & (quadgramsgrams$word3 %in% trigrams$word3),] %>% group_by(word1,word2,word3) %>% top_n(3,n) %>% arrange(desc(n))
+```
+
+
+```{r, echo=TRUE}
+word_list = list()
+
+words = unique(trigrams$word1)
+i=0
+pb2 <- txtProgressBar(min = 0, max = length(words), style = 3)
+for (word in words) {
+    i = i + 1
+    flush.console()
+    print(i)
+    top_three = (trigrams %>% filter(word1 == word) %>% arrange(desc(n)))[1:3,]   
+    next_one = as.list(top_three$word2)
+    trie = add_to_trie(trie, word, next_one)
+}
+
+
+i=0
+pb2 <- txtProgressBar(min = 0, max = nrow(trigrams), style = 3)
+for(row in 1:nrow(trigrams)) {
+    i = i + 1
+    setTxtProgressBar(pb2, i)
+    current_row = trigrams[i,]
+    phrase = paste(current_row$word1, current_row$word2, current_row$word3)
+    # Add to list
+    trie = add_to_trie(trie, phrase)
+}
+
+
+# Wtih freq value version
+# for(word in unigrams$token) {
+#     i = i + 1
+#     setTxtProgressBar(pb, i)
+#     # Extract bigram info
+#     bigram_rows = (bigrams %>% filter(word1 == word) %>% top_n(3,n))
+#     bigram = as.list(bigram_rows$freq)
+#     names(bigram) = bigram_rows$word2
+#     # Extract trigram info
+#     trigram_rows = (trigrams %>% filter(word1 == word) %>% top_n(3,n))
+#     trigram = as.list(trigram_rows$freq)
+#     names(trigram) = paste(trigram_rows$word2, trigram_rows$word3)
+#     # Add list for current word
+#     word_list[[word]] = list(bigram, trigram)
+# }
+
+# Names only version
+# pb1 <- txtProgressBar(min = 0, max = length(unigrams$token), style = 3)
+# i=0
+# for(word in unigrams$token) {
+#     i = i + 1
+#     setTxtProgressBar(pb1, i)
+#     # Extract bigram info
+#     bigram_rows = (bigrams %>% filter(word1 == word) %>% top_n(3,n))
+#     bigram = as.list(bigram_rows$word2)
+#     # Extract trigram info
+#     trigram_rows = (trigrams %>% filter(word1 == word) %>% top_n(3,n))
+#     trigram = as.list(paste(trigram_rows$word2, trigram_rows$word3))
+#     # Add list for current word
+#     word_list[[word]] = list(bigram, trigram)
+# }
+```
+
+
+```{r}
+trie = list()
+add_to_trie = function(trie, word, values_list=NULL) {
+    char_vec = strsplit(word, "")[[1]]
+    key_ring = c()
+    for(i in 1:length(char_vec)) {
+        key_ring = c(key_ring, char_vec[i])
+        if(is.null(trie[[key_ring]])) {
+            trie[[key_ring]] = list(is_word = FALSE)
+        }
+        if(i == length(char_vec) | char_vec[i+1] == " ") {
+            trie[[key_ring]]$is_word = TRUE
+            if (!is.null(values_list)) {
+                trie[[key_ring]]$next_one = values_list
+                #trie[[key_ring]]$next_two = values_list[[2]]
+            }
+            
+        }
+    }
+    return(trie)
+}
+```
+
+
+```{r}
+for(word in names(word_list)){
+    trie = add_to_trie(trie, word, word_list[[word]])
+}
+```
+
+
+
+
+
+```{r}
+find_word <- function(this, choice_rank = 1, word_str="", first_run=TRUE){
+    if(this[[1]]){ # If current node is_word, return completed word
+        return(word_str)
+    }
+    else if (choice_rank+1 > length(this)) { # If the number of possible next letters for current node is less than the desired choice
+        return(0)    
+    }
+    else if (first_run) {
+        return(find_word(this[[choice_rank+1]], word_str=paste0(word_str, names(this[choice_rank+1])), first_run = FALSE)) 
+    }
+    else{
+        first_run = FALSE
+        return(find_word(this[[2]], word_str=paste0(word_str, names(this[2])), , first_run = FALSE))   
+    }
+}
+
+
+get_child = function(input) {
+    result = tryCatch({
+        trie[[strsplit(input, "")[[1]]]]
+    }, warning = function(w) {
+        #warning-handler-code
+    }, error = function(e) {
+        return(NULL)
+    }, finally = {
+        #cleanup-code
+    }) # END tryCatch
+    return(result) 
+}
+
+
+letter_drop = function(input) {
+    #print("letter drop output:")
+    
+    input = substr(input, 1, nchar(input)-1)  
+    
+    #print(input)
+    if(input == "" | length(input) < 1) {
+        return(0)    
+    }
+    current = get_child(input)
+    found = !is.null(current)
+    if(found) {
+        return(list(trie=current, word=input))    
+    }
+    else {
+        return(letter_drop(input))    
+    }
+}
+
+
+pred = function(input, choice_no=1) {
+    input_trie = get_child(input)
+    success_get = !is.null(input_trie)
+    #print(paste("initial word match?", success_get))
+    if(!success_get) {
+        drop_list = letter_drop(input) 
+        success_drop = !anyNA(drop_list, recursive=FALSE)
+        #print(paste("dropped word match?", success_drop))
+        if(!success_drop) {
+            return(NULL) # What to return if no matches after initial and letter drop   
+        }
+        input_trie = drop_list[[1]]
+        input = drop_list[2]
+    }
+    #print(paste("final entry is:",input))
+    result = find_word(input_trie,choice_no)
+    if(result==0) {
+        return(0)    
+    }
+    else {
+        return(paste0(input,result)) 
+    }
+}
+
+suggest_3 = function(input) {
+    one = pred(input, 1)
+    two = pred(input, 2)
+    three = pred(input, 3) 
+    
+    if(one == two) {
+        one_trie = get_child(input)
+        # check length
+        if(length(one_trie) >= 4) {
+            two = pred(paste0(input,names(one_trie[3])), 1)
+            three = pred(paste0(input,names(one_trie[4])), 2) 
+        }
+        else if(length(one_trie) == 3) {
+            two = pred(paste0(input,names(one_trie[3])), 1)
+            three = pred(paste0(input," "), 2) 
+        }
+        else if(length(one_trie) == 2) {
+            two = pred(paste0(input," "), 1)
+            three = pred(paste0(input," "), 2)   
+            
+        }
+        else {
+            two = three = 0 
+        }
+        
+    }
+    
+    
+    if(one != 0 & two == 0 & length(two) > 1) {
+        #print("dropping for two")
+        drop_list = letter_drop(input)
+        success_drop = !anyNA(drop_list, recursive=FALSE)
+        #print(paste("dropped word match?", success_drop))
+        if(!success_drop) {
+            two = 0 # What to return if no matches after initial and letter drop
+        }
+        else {
+            #print("dropped word to predict:")
+            #print(drop_list[[2]])
+            two = pred(drop_list[[2]],1)
+        }
+        
+    }
+    if(one != 0 & three == 0 & length(three) > 1) {
+        #print("dropping for three")
+        drop_list = letter_drop(input)
+        success_drop = !anyNA(drop_list, recursive=FALSE)
+        #print(paste("dropped word match?", success_drop))
+        if(!success_drop) {
+            three = 0 # What to return if no matches after initial and letter drop
+        }
+        else {
+            #print("dropped word to predict:")
+            #print(drop_list[[2]])
+            three = pred(drop_list[[2]],2)
+        }
+        
+    }
+    
+    if(one==two) {
+        two = 0    
+    }
+    if(three == one | three == two) {
+        three = 0    
+    }
+    
+    return(list(one,two,three))
+    
+}
+
+
+clean_vector_source = function(vector_source) {
+    clean_output = vector_source %>%
+        str_replace_all('[^\\sA-Za-z\'\\-]', '') %>%
+        str_replace_all('(?<!\\b[A-Za-z]{0,9})([-])(?![A-Za-z]+\\b)', "")
+    clean_output = clean_output[!str_detect(clean_output, "[^\x20-\x7E]")]
+    return(clean_output)
+}
+
+final_3 = function(input) {
+    
+    input = clean_vector_source(input)
+    
+    num_space = str_count(input, " ")
+    
+    if(num_space == 0 | (num_space == 1 & substr(input, nchar(input), nchar(input)) == " ")) {
+        final_list = suggest_3(input) 
+    }
+    else if(num_space >= 1) {
+        ## Check if space is last
+        ending_space = (substr(input, nchar(input), nchar(input)) == " ")
+        
+        if(ending_space) {
+            input = substr(input, 1, nchar(input)-1)        
+        }
+        last_word = str_extract(input, "\\s(\\w+)$") %>% str_replace(" ", "")
+        last_two = str_extract(input, '\\S+\\s+\\S+$')
+        
+        if(ending_space) {
+            last_word = paste0(last_word," ")
+            last_two = paste0(last_two," ") 
+        }
+        first_opts = suggest_3(last_two)
+        second_opts = suggest_3(last_word)
+        
+        final_list = list()
+        for(elem in first_opts) {
+            if(elem != 0 & !(elem %in% final_list)) {
+                final_list = c(final_list, elem)    
+            }
+            if(length(final_list) == 3) {
+                break    
+            }
+        }
+        
+        if(length(final_list) < 3) {
+            for(elem in second_opts) {
+                if(elem != 0 & !(elem %in% final_list)) {
+                    final_list = c(final_list, elem)    
+                }
+                if(length(final_list) == 3) {
+                    break    
+                }
+            }
+        }
+    }
+    final_list_clean = list()
+    for(elem in final_list) {
+        if(elem == 0) {
+            final_list_clean = c(final_list_clean, "")        
+        }
+        else{
+            final_list_clean = c(final_list_clean, elem) 
+        }
+    }
+    
+    list_len = length(final_list_clean)
+    if(list_len < 3) {
+      for(i in 1:(3-list_len)) {
+        final_list_clean = c(final_list_clean, "")
+        }  
+    }
+    
+    
+    return(final_list_clean)
+}
+
+```
+
+
+
+
+
+

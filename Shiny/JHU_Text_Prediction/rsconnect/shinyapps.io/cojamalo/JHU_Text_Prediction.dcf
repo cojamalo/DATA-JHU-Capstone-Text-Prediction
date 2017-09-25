@@ -1,0 +1,10 @@
+name: JHU_Text_Prediction
+title: JHU_Text_Prediction
+account: cojamalo
+server: shinyapps.io
+appId: 213227
+bundleId: 976944
+url: https://cojamalo.shinyapps.io/JHU_Text_Prediction/
+when: 1505151437.16297
+asMultiple: FALSE
+asStatic: FALSE
