@@ -12,6 +12,8 @@ Please view https://cojamalo.github.io/DATA-JHU-Capstone-Text-Prediction/milesto
 
 The "Shiny" folder contains the code for the app and my accompanying slideshow.
 
+Please view https://github.com/cojamalo/DATA-JHU-Capstone-Text-Prediction/blob/master/Predictive%20Text.Rmd to view the notes file that contains much of the processing code for constructing the final database for the app.
+
 Please view https://cojamalo.shinyapps.io/JHU_Text_Prediction/ to try the app.
 
 # Project description from Coursera:
